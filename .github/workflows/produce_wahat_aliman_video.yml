@@ -1,0 +1,37 @@
+name: خط إنتاج فيديوهات قناة واحة الإيمان (15 دقيقة)
+
+on:
+  workflow_dispatch:
+    inputs:
+      episode_number:
+        description: 'رقم الحلقة في سلسلة جلسات نور'
+        required: true
+        default: '1'
+        type: string
+      surah_title:
+        description: 'عنوان السورة أو الجلسة'
+        required: true
+        default: 'سورة الضحى والشرح وقصار السور : جلسات نور'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  render-video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg and Arabic Fonts
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 python3-pil
+          fc-cache -fv
+      - name: Render 15-Minute Video
+        run: |
+          python3 wahat_aliman_production_line.py --ep "${{ inputs.episode_number }}" --surah "${{ inputs.surah_title }}" --out-dir output
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wahat-aliman-ep-${{ inputs.episode_number }}
+          path: output/*.mp4
