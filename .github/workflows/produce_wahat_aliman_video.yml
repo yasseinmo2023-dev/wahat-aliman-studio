@@ -1,15 +1,15 @@
-name: 🎬 المصنع الذاتي لقناة واحة الإيمان (15 دقيقة + ريلز + تلاوة المنشاوي وعبدالباسط)
+name: 🎬 مصنع واحة الإيمان (فيديو طويل + ريلز متعددة + تلاوة)
 
 on:
   workflow_dispatch:
     inputs:
       episode_number:
-        description: 'رقم الحلقة (1=جبر الخواطر/المنشاوي، 2=الرزق والواقعة/عبدالباسط، 3=الملك والنوم/المنشاوي، 4=الرحمن/عبدالباسط)'
+        description: 'رقم الحلقة (1=جبر الخواطر/المنشاوي، 2=الواقعة/عبدالباسط، 3=الملك والمعوذات/المنشاوي، 4=الرحمن/عبدالباسط)'
         required: true
         default: '1'
         type: string
       reciter_choice:
-        description: 'اختيار القارئ (auto يختار تلقائياً حسب السورة والمعنى)'
+        description: 'اختيار القارئ (auto يختار حسب الحلقة)'
         required: true
         default: 'auto'
         type: choice
@@ -20,36 +20,84 @@ on:
           - 'abdulbasit_murattal'
           - 'abdulbasit_mujawwad'
       target_minutes:
-        description: 'مدة الفيديو الطويل بالدقائق (15 دقيقة أو 45 دقيقة)'
+        description: 'مدة الفيديو الطويل بالدقائق (15 أو 45)'
         required: true
         default: '15'
         type: string
+      reels_count:
+        description: 'عدد الريلز (كل ريلز من موضع مختلف)'
+        required: true
+        default: '3'
+        type: string
+      fps:
+        description: 'الإطارات في الثانية (24 جودة أعلى، 15 ترميز أسرع)'
+        required: true
+        default: '24'
+        type: choice
+        options:
+          - '24'
+          - '15'
+          - '30'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   auto-produce-episode:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - name: Install FFmpeg and Arabic Fonts
+
+      - name: Install FFmpeg, Arabic fonts, numpy
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 python3-pil
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 python3-pil python3-numpy
           fc-cache -fv
-      - name: Auto-Fetch Quran Audio & Render 15m Video + Reels + SEO
+
+      - name: Verify fonts and RTL shaping
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          from PIL import features
+          font_groups = [
+              ["/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf", "/usr/share/fonts/opentype/noto/NotoNaskhArabic-Bold.ttf"],
+              ["/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf", "/usr/share/fonts/opentype/noto/NotoSansArabic-Bold.ttf"],
+              ["/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf", "/usr/share/fonts/opentype/noto/NotoSansArabic-Regular.ttf"],
+              ["/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],
+          ]
+          missing = [g[0] for g in font_groups if not any(os.path.exists(p) for p in g)]
+          print("raqm:", features.check("raqm"))
+          if missing or not features.check("raqm"):
+              print("MISSING:", missing); sys.exit(1)
+          PY
+
+      - name: Restore Quran audio cache
+        uses: actions/cache@v4
+        with:
+          path: output/_audio_cache
+          key: quran-audio-ep${{ inputs.episode_number }}-${{ inputs.reciter_choice }}
+          restore-keys: |
+            quran-audio-${{ inputs.reciter_choice }}-
+            quran-audio-
+
+      - name: Render episode (long video + reels + SRT + SEO)
         run: |
           python3 wahat_aliman_production_line.py \
             --ep "${{ inputs.episode_number }}" \
             --reciter "${{ inputs.reciter_choice }}" \
             --target-minutes "${{ inputs.target_minutes }}" \
+            --reels "${{ inputs.reels_count }}" \
+            --fps "${{ inputs.fps }}" \
             --out-dir output
-      - name: Upload Complete Episode Package (MP4 + Reels + SRT + SEO)
+
+      - name: Upload episode package
         uses: actions/upload-artifact@v4
         with:
-          name: wahat-aliman-autopilot-ep-${{ inputs.episode_number }}
+          name: wahat-aliman-ep-${{ inputs.episode_number }}
           path: |
             output/*.mp4
             output/*.srt
             output/*.txt
+          if-no-files-found: error
+          retention-days: 14
