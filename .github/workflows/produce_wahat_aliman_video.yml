@@ -1,24 +1,35 @@
-name: خط إنتاج فيديوهات قناة واحة الإيمان (15 دقيقة)
+name: 🎬 المصنع الذاتي لقناة واحة الإيمان (15 دقيقة + ريلز + تلاوة المنشاوي وعبدالباسط)
 
 on:
   workflow_dispatch:
     inputs:
       episode_number:
-        description: 'رقم الحلقة في سلسلة جلسات نور'
+        description: 'رقم الحلقة (1=جبر الخواطر/المنشاوي، 2=الرزق والواقعة/عبدالباسط، 3=الملك والنوم/المنشاوي، 4=الرحمن/عبدالباسط)'
         required: true
         default: '1'
         type: string
-      surah_title:
-        description: 'عنوان السورة أو الجلسة'
+      reciter_choice:
+        description: 'اختيار القارئ (auto يختار تلقائياً حسب السورة والمعنى)'
         required: true
-        default: 'سورة الضحى والشرح وقصار السور : جلسات نور'
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - 'minshawi_murattal'
+          - 'minshawi_mujawwad'
+          - 'abdulbasit_murattal'
+          - 'abdulbasit_mujawwad'
+      target_minutes:
+        description: 'مدة الفيديو الطويل بالدقائق (15 دقيقة أو 45 دقيقة)'
+        required: true
+        default: '15'
         type: string
 
 permissions:
   contents: write
 
 jobs:
-  render-video:
+  auto-produce-episode:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +38,18 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y ffmpeg fonts-noto-core fonts-dejavu-core libraqm0 python3-pil
           fc-cache -fv
-      - name: Render 15-Minute Video
+      - name: Auto-Fetch Quran Audio & Render 15m Video + Reels + SEO
         run: |
-          python3 wahat_aliman_production_line.py --ep "${{ inputs.episode_number }}" --surah "${{ inputs.surah_title }}" --out-dir output
-      - name: Upload Video Artifact
+          python3 wahat_aliman_production_line.py \
+            --ep "${{ inputs.episode_number }}" \
+            --reciter "${{ inputs.reciter_choice }}" \
+            --target-minutes "${{ inputs.target_minutes }}" \
+            --out-dir output
+      - name: Upload Complete Episode Package (MP4 + Reels + SRT + SEO)
         uses: actions/upload-artifact@v4
         with:
-          name: wahat-aliman-ep-${{ inputs.episode_number }}
-          path: output/*.mp4
+          name: wahat-aliman-autopilot-ep-${{ inputs.episode_number }}
+          path: |
+            output/*.mp4
+            output/*.srt
+            output/*.txt
